@@ -7,19 +7,21 @@ This root carries the canonical pipeline (WORKFLOW.md) and governing standards.
 
 ## Startup Brief
 
-1. Read `WORKFLOW.md` to understand the 6-phase production pipeline.
-2. Open the sub-project's `README.md` for its current phase + build commands.
-3. Character locks are the identity source of truth — never alter `character-locks.json`
-   without regenerating canonicals and QA-ing existing frames.
+1. For work on **Whisperer in the Wire**: read `Whisperer in the Wire/docs/production-plan-v3.md` first — it is the canonical plan and overrides this WORKFLOW.md on conflict.
+2. Check `Whisperer in the Wire/README.md` for current phase and open decisions.
+3. Read `WORKFLOW.md` for the base pipeline; note that Whisperer extends it with a two-register grammar and Phase 3B.
+4. Character locks in `src/character-locks.json` are law — do not change without regenerating canonicals and QA-ing existing frames.
 
 ## Agent Assignments
 
 | Task | Agent |
 |------|-------|
-| Pipeline design, shot bible generation, prompt architecture | Claude (SRE/architect) |
-| World Bible review, screenplay QA, large-doc analysis | Gemini (Lead Architect) |
-| Frame generation, batch automation | Run locally via PowerShell / Grok CLI |
+| Pipeline design, shot bible generation, prompt architecture, file ops | Claude (SRE/architect) |
+| Screenplay QA, world bible coherence, large-doc analysis, beat/tone audit | Gemini (Lead Architect) |
+| Frame generation (Register A), batch automation | Run locally via PowerShell / Grok CLI |
+| Register B source images, image-to-video live holds | Run locally (tool TBD in Phase 3) |
 | Voice synthesis, audio mix | Run locally via `scripts/build-audio.py` |
+| Environmental/tooling troubleshooting | Claude (SRE — Gemini defers to Claude for this) |
 
 ## Submodule Policy
 
