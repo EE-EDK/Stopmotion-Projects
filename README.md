@@ -8,7 +8,7 @@ Governing pipeline, world-building standards, and AI tooling live at root.
 
 | Submodule | Status | Logline |
 |-----------|--------|---------|
-| [Whisperer in the Wire](Whisperer%20in%20the%20Wire/) | 🟡 Pre-production | TBD |
+| [Whisperer in the Wire](Whisperer%20in%20the%20Wire/) | 🟡 Phase 0 — Decisions & lock | A synthetic-media debunker installs a neural interface sold as salvation — and discovers too late that perfect resolution is how you get replaced. |
 
 ## Shared Pipeline
 

@@ -1,8 +1,27 @@
 # Stop-Motion Photorealism Horror — Production Pipeline
 
 Adapted from *The Void is Crimson* AI video pipeline.
-Key difference: every frame is a **discrete still** rendered by Grok; the stop-motion
+Key difference: every Register A frame is a **discrete still** rendered by Grok; the stop-motion
 aesthetic is baked into the prompts and timing metadata, not post-processed.
+
+> **Project-level extensions:** sub-projects may add phases, registers, or constraints beyond this
+> base pipeline. *Whisperer in the Wire* extends this with a two-register grammar (Register A /
+> Register B) and Phase 3B (animatic gate). See `Whisperer in the Wire/docs/production-plan-v3.md`
+> for the canonical project plan when working on that sub-project. On conflict, the sub-project
+> plan wins over this document.
+
+---
+
+## Two-Register Grammar (Whisperer extension)
+
+Some sub-projects operate in two visual-ontological modes. Understand this before working on Whisperer:
+
+| Register | Medium | Frame rate | Character |
+|----------|--------|------------|-----------|
+| **A — Mortal** | Stop-motion stills (Grok GenerateImage) | ~8 fps (jitter) | Handmade, imperfect |
+| **B — Hyperreal** | Photoreal imagery (high-res + image-to-video) | Smooth | Wrong, over-resolved |
+
+A→B transitions are always **hard cuts**. Never blend. Register B appears only at designated breach beats.
 
 ---
 
@@ -34,49 +53,70 @@ Commit these to `docs/specs/tone-guide.md` before scripting:
 
 ---
 
-## Phase 1 — Script + Shot Bible
+## Phase 1 — Story / Script *(hard gate)*
+
+Write the script before touching the pipeline. A locked script is mandatory before any frame generation.
 
 ### 1-A Screenplay
-Write the screenplay as an HTML doc (`docs/screenplay/<title>.html`) — browsable in a
-Grok/Claude review session. Include:
+Write the screenplay in `docs/screenplay/` — browsable in a Grok/Claude review session. Include:
 - Beat markers tying to dialogue JSON
-- ON-SCREEN vs. OFF-SCREEN voice tags (Grok only lip-syncs what it sees)
+- Register tags: [REGISTER-A] / [REGISTER-B] per scene
+- ON-SCREEN vs. OFF-SCREEN voice tags
 
 ### 1-B Shot Bible Generator
 `src/generate-shot-bible.py` is the **single source of truth generator**. It reads:
-- `src/production-data.py` — per-beat metadata (location, characters, emotion, camera)
-- `src/character-locks.json` — cast descriptions (injected into every frame prompt)
+- `src/production-data.py` — per-beat metadata (location, characters, emotion, camera, register)
+- `src/character-locks.json` — cast descriptions (injected into every Register A frame prompt)
 - `src/enriched-descriptions.json` — per-shot flavor text (overrides defaults)
 - `src/dialogue.json` — beat → [{speaker, line, direction, timing}]
 
 It emits:
-- `output/<title>-shot-bible.json` — master manifest
-- `output/<title>-prompts.csv` — one row per frame with full Grok prompt
-- `output/<title>-storyboard.html` — browsable storyboard
+- `output/shot-bible.json` — master manifest
+- `output/prompts.csv` — one row per frame with full Grok prompt
+- `output/storyboard.html` — browsable storyboard
 
 **Regenerate after every edit** to production data — never hand-edit the output files.
 
 ### 1-C Frame Rate Planning
 Stop-motion timing is not linear. Document in `docs/specs/timing.md`:
 ```
-target_fps = 12          # or 8 for more staccato horror feel
+fps_register_a = 8     # mortal register — jitter is the point
+fps_register_b = 24    # hyperreal register — smoothness is the grammar
 hold_frames = {
-  "idle": 2,             # character stationary — hold same frame N times
-  "action": 1,           # full-motion — new frame every tick
-  "impact": 3,           # freeze on a hit/scare
+  "idle":   2,         # character stationary
+  "action": 1,         # full-motion
+  "impact": 3,         # freeze on a hit/scare
+  "frozen": 8,         # stillness-as-dread
 }
 ```
-The shot bible generator uses these to expand beats into discrete frame slots.
 Total frame count = sum(beat_duration_sec × fps / hold_multiplier).
 
 ---
 
-## Phase 2 — Frame Generation (Grok CLI)
+## Phase 2 — Design / Look-dev & Pre-production
 
+Both registers must be defined as buildable craft before any production work begins.
+
+Key deliverables to `docs/look-dev/`:
+- Lookbook (both registers + approved final-image frame)
+- Continuity bible (chair states, replacement-part inventory, set dressing across sessions)
+- Voice casting notes
+
+---
+
+## Phase 3 — Pipeline / Technical Proof *(critical de-risk)*
+
+Prove the look before committing to full production.
+Deliverable: `output/animatic/whisperer_slice_v1.mp4` — one full breach end to end.
+
+**Kill criterion:** if the hard cut reads as a glitch after two method iterations, stop and re-scope.
+See the sub-project production plan for fallback options.
+
+### Frame Generation — Register A (Grok CLI)
 **Tool:** `GenerateImage` (text→image) via Grok CLI on SuperGrok login ($0 cost).
 Do NOT set `XAI_API_KEY` — that routes to the paid API. Run from your own terminal.
 
-### Prompt Architecture (per frame)
+#### Prompt Architecture (Register A frame)
 ```
 [GLOBAL STYLE LOCK]
 Stop-motion puppet animation. Photorealistic miniature. Practical lighting.
@@ -85,123 +125,105 @@ Film grain ISO 3200. Lens: 50mm macro equivalent.
 [CHARACTER LOCK — injected from character-locks.json]
 {character_description}
 
-[SHOT DIRECTION — from prompts.csv column "prompt"]
+[SHOT DIRECTION — from prompts.csv]
 {enriched_shot_description}
 
 [HORROR MODIFIER — from tone guide]
 {tone_palette_string}
 ```
 
-### Frame Consistency Strategy
+#### Frame Consistency Strategy
 Grok has no memory between calls. Identity consistency comes entirely from the cast lock text.
-To preserve continuity:
 1. Lock descriptions must name specific, *unusual* visual details (a cracked left eye socket,
    specific rust stain pattern) — generic descriptions drift.
-2. `src/regenerate-canonical.py` — generates 40 canonical reference frames for QA comparison.
-   Run after every lock text change.
+2. `src/regenerate-canonical.py` — generates canonical reference frames for QA comparison.
 3. Batch frames for the same character in the same session window when possible.
 
-### Running Frame Generation
+#### Running Frame Generation
 ```powershell
-.\scripts\run-frames.ps1 -Section I -Limit 100     # generate up to 100 frames for Section I
-.\scripts\run-frames.ps1 -Limit 30                  # next 30 needed (any section)
-.\scripts\run-frames.ps1 -Of 3 -Shard 0 -Limit 50  # parallel shard (3 windows)
+.\scripts\run-frames.ps1 -Section I -Limit 100     # up to 100 frames for Section I
+.\scripts\run-frames.ps1 -Limit 30                  # next 30 needed
+.\scripts\run-frames.ps1 -Of 3 -Shard 0 -Limit 50  # parallel shard
 ```
-Output: `generated/frames-generated/<frame_id>.png`
-Resumable: skips frames already present.
+Output: `generated/frames-generated/<frame_id>.png`. Resumable: skips existing.
 
-### Inter-Frame Drift Suppression
-The biggest stop-motion AI problem: frames of the same character look like different puppets.
-Mitigation stack (in order of effectiveness):
-1. **Specificity in lock text** — the primary lever
-2. **Canonical anchors** — QA each batch against `refs/character-locks/` contact sheet
-3. **Prompt recycling** — identical prompt structure for frames in the same beat; only
-   motion/expression changes
-4. **Manual curation** — regenerate outlier frames individually (`-Mode gen` suffix variant)
+### Frame Generation — Register B (Hyperreal)
+Register B is NOT generated by Grok GenerateImage. It requires a two-step process:
+1. **Source image** — a high-resolution photoreal image generated by a capable model.
+2. **Image-to-video** — the source image becomes a barely-moving clip for live holds, or a static
+   shot for the final image.
+
+Register B plays **smooth** (no decimation). The smoothness itself is the grammar.
+Live holds (Register A technique): image-to-video → **decimated to 8 fps** to stay in mortal register.
 
 ---
 
-## Phase 3 — Frame QA
+## Phase 3B — Animatic & Locked Edit *(gate before any animation)*
 
-Run after each batch. Do not proceed to Phase 4 until QA passes a section.
+Cut storyboards/rough frames to the script and lock timing. Production animates **to this**.
+Stop-motion has near-zero coverage — discover pacing/timing problems here, not on the table.
 
-### 3-A Character Consistency Check
-Open `ui/contact-sheet.html` (generated by shot bible script). Compare:
-- Character face/body against `refs/character-locks/<character>-lock.png`
-- Flag frames where a character has >2 identity deviations (different hair, wrong hand count, etc.)
-
-### 3-B Horror Tone Check
-Per frame, ask: does it read as oppressive / uncanny / dreadful — or just "dark scene"?
-Reject frames that are merely dark without menace. Note in `docs/qa/batch-<N>-notes.md`.
-
-### 3-C Motion Path Review
-Lay flagged frames in sequence in any image viewer. Does the pose progression tell the motion?
-Stop-motion works by implying motion between frames — even with AI generation, the sequence
-must read as intentional movement, not random drift.
-
-### 3-D Prompt Hazard Check
-Known Grok failure modes (from `docs/specs/prompt-hazards.md`):
-- Literal red "laser-line" artifacts across eyes when describing eye effects
-- Ghost/translucent characters rendered solid
-- Invented background text (signs, labels) — prohibit with "no text, no signage" in global lock
-- Off-screen characters getting lip-synced onto visible faces (Phase 4 issue, not Phase 2)
+Deliverable: `output/animatic/whisperer_animatic_v1.mp4` (locked timing).
 
 ---
 
-## Phase 4 — Animation Assembly
+## Phase 4 — Production
 
-### 4-A Sequence → Video
-```powershell
-.\scripts\assemble-sequence.ps1 -Section I       # FFmpeg concat for one section
-.\scripts\assemble-sequence.ps1 -WithTimings     # uses per-frame hold counts from shot bible
-```
-The script reads `output/<title>-shot-bible.json` for hold counts.
-Output: `output/sections/S<N>.mp4` (silent).
+Build and capture, animating to the locked animatic.
 
-### 4-B Color Grading
-After assembly, apply LUT or FFmpeg filter chain from `docs/specs/grade-spec.md`.
-Minimal target: desaturate 30%, add grain, boost shadow contrast.
-```powershell
-.\scripts\grade.ps1 -Input output/sections/S1.mp4 -Lut refs/luts/horror-v1.cube
-```
+### Scheduling Discipline
+- Batch shots by shared set/puppet-state to avoid teardown/rebuild
+- Sessions are **non-resumable** mid-shot (lighting/position continuity) — plan around complete shots
+- Guard momentum/burnout on the long solo animate
 
 ---
 
 ## Phase 5 — Audio
 
-### 5-A Narration / Dialogue (Kokoro TTS)
+### Narration / Dialogue (Kokoro TTS)
 `scripts/build-audio.py` reads `src/dialogue.json` → synthesizes per-line WAV files →
 `generated/audio/<beat_id>-<speaker>.wav`.
-Narrator voice: low, grave, mysterious (LotR-prologue reference). Tune voice blend in script.
 
-### 5-B Foley Design
-Stop-motion needs foley that suggests the puppet medium:
+### Foley Design
+```python
+# Foley cues keyed to beat IDs in src/foley-cues.json
+```
+Stop-motion foley that suggests the puppet medium:
 - Clay/resin creak on movement
 - Wire armature tick on joint flex
-- Environment: miniature room resonance (slightly hollow, small-space reverb)
-Store reference timing in `src/foley-cues.json` keyed to beat IDs.
+- Environment: miniature room resonance (small-space reverb)
 
-### 5-C Mix + Mux
-```powershell
-.\scripts\build-audio.py --mix-section I        # assemble per-section mix
-.\scripts\assemble-sequence.ps1 -WithAudio -Section I   # mux into video
-```
+### Register B — "Clarity" Sound Design
+The audio register switch mirrors the visual. In Register B moments:
+- Over-clean audio — wrong room tone
+- Impossible latency (sound arrives before its source)
+- Absence of ambient noise that should be present
 
 ---
 
-## Phase 6 — Final Assembly + QA
+## Phase 6 — Post / Final Assembly / QA
 
 ```powershell
-.\scripts\assemble-sequence.ps1 -Final          # concat all sections → output/<title>-final.mp4
+.\scripts\assemble-sequence.ps1 -Final
 ```
 
 Final QA checklist (`docs/qa/final-review.md`):
-- [ ] Character identity stable across all sections
+- [ ] Four breaches only — no fifth
+- [ ] Every A→B is a hard cut (no blends)
+- [ ] Register B smoothness vs. Register A jitter reads as ontologically different
+- [ ] Character identity stable across Register A sections
 - [ ] Horror tone consistent (no accidental warmth/comedy frames)
+- [ ] Sound design of "clarity" lands on Register B beats
 - [ ] Narration timing matches intended beats
-- [ ] Foley synchronized to visible movement
-- [ ] No text artifacts in frame
-- [ ] Motion path reads as intentional stop-motion, not random drift
+- [ ] HDR/legal-levels on the final image (no illegal clipping)
+- [ ] Caption track present
+- [ ] No text artifacts in Register A frames
+
+---
+
+## Phase 7 — Festival / Release / Scale
+
+See sub-project plan for premiere vs. post decision, AI-method framing, and festival strategy.
 
 ---
 
